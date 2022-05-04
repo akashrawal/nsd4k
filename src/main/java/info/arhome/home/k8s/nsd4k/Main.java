@@ -29,6 +29,13 @@ public class Main {
             throw new RuntimeException("Unable to create SigningThread", e);
         }
 
-        new NamingThread(config).run();
+        final DnsDB dnsDB = new DnsDB();
+        try {
+            new DnsServer(config, dnsDB);
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to create DnsServer", e);
+        }
+
+        new NamingThread(config, dnsDB).run();
     }
 }

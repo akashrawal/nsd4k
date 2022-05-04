@@ -114,7 +114,7 @@ public class CA {
         //subjectAltName
         String primaryName = null;
         StringBuilder sanBuilder = new StringBuilder();
-        for (String suffix : config.certificateDomains) {
+        for (String suffix : config.domains) {
             if (!sanBuilder.isEmpty())
                 sanBuilder.append(",");
             String fullName = name;

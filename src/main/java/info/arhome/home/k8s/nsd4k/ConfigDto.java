@@ -1,11 +1,22 @@
 package info.arhome.home.k8s.nsd4k;
 
+import java.util.List;
+
 public class ConfigDto {
     public String datadir;
+    public String[] domains;
+    public String distinguishedNamePrefix;
+    public String caCommonName;
+
+    public static class ListeningSocket {
+        public String addr;
+        public int port;
+    }
+    public ListeningSocket[] dnsListen;
+
+    //TODO: delete
     public String zoneTemplate;
     public String zoneOutput;
-    public String[] reloadCmd;
-    public String distinguishedNamePrefix;
-    public String[] certificateDomains;
-    public String caCommonName;
+    public String reloadCmd;
 }
+

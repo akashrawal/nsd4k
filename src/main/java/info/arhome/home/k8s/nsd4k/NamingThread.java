@@ -11,62 +11,18 @@ import okhttp3.Call;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public class NamingThread implements Runnable {
 
-    static class ZoneInfo {
-        public HashMap<String, List<String>> aRecords = new HashMap<>();
-
-        public boolean eq(ZoneInfo other) {
-            return aRecords.equals(other.aRecords);
-        }
-    }
-
     final ConfigDto config;
+    final DnsDB dnsDB;
 
-    final ZoneInfo zoneInfo;
-    final ZoneInfo oldZoneInfo;
-
-    public NamingThread(ConfigDto _config) {
+    public NamingThread(ConfigDto _config, DnsDB _dnsDB) {
         config = _config;
-
-        zoneInfo = new ZoneInfo();
-        oldZoneInfo = new ZoneInfo();
-    }
-
-    void zoneUpdateThreadFn() {
-        while (true) {
-            try {
-                synchronized (zoneInfo) {
-                    if (! zoneInfo.eq(oldZoneInfo)) {
-                        //Copy all records
-                        oldZoneInfo.aRecords.clear();
-                        oldZoneInfo.aRecords.putAll(zoneInfo.aRecords);
-
-                        //Update DNS zone
-                        try (ZoneWriter zoneWriter = new ZoneWriter(config)) {
-                            for (Map.Entry<String, List<String>> entry : zoneInfo.aRecords.entrySet()) {
-                                zoneWriter.addAEntries(entry.getKey(), entry.getValue());
-                            }
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("ERROR: Zone update failed: " + e);
-                e.printStackTrace();
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (Exception e) {
-                System.err.println("ERROR: failed to sleep: " + e);
-                e.printStackTrace();
-                System.exit(2);
-            }
-        }
+        dnsDB = _dnsDB;
     }
 
     void loop() {
@@ -129,13 +85,13 @@ public class NamingThread implements Runnable {
                     if (dnsName == null)
                         dnsName = name + "." + namespace;
 
-                    synchronized (zoneInfo) {
+                    synchronized (dnsDB) {
                         //Update A records
                         if (! externalIPs.isEmpty()) {
                             if (serviceResponse.type.equals("DELETED")) {
-                                zoneInfo.aRecords.remove(dnsName, externalIPs);
+                                dnsDB.aRecords.remove(dnsName, externalIPs);
                             } else {
-                                zoneInfo.aRecords.put(dnsName, externalIPs);
+                                dnsDB.aRecords.put(dnsName, externalIPs);
                             }
                         }
                     }
@@ -152,19 +108,6 @@ public class NamingThread implements Runnable {
 
     @Override
     public void run() {
-        //Copy only the template
-        try {
-            ZoneWriter zoneWriter = new ZoneWriter(config);
-            zoneWriter.close();
-        } catch (Exception se) {
-            throw new PrettyException("Unable to write initial zone file", se);
-        }
-
-        //Start zone update thread
-        Thread zoneUpdateThread = new Thread(this::zoneUpdateThreadFn);
-        zoneUpdateThread.setDaemon(true);
-        zoneUpdateThread.start();
-
         //Kubernetes watch loop
         while (true) {
             loop();
