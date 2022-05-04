@@ -1,5 +1,7 @@
 package info.arhome.home.k8s.nsd4k;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xbill.DNS.Flags;
 import org.xbill.DNS.Header;
 import org.xbill.DNS.Message;
@@ -26,8 +28,13 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class DnsServer {
+    static final Logger log = LoggerFactory.getLogger(DnsServer.class);
+
     final ConfigDto config;
     final DnsDB dnsDB;
 
@@ -44,14 +51,14 @@ public class DnsServer {
         if (config.dnsListen.length == 0)
             addListener("127.0.0.1", 8053);
 
-        System.out.println("DnsServer: running");
+        log.info("running");
     }
 
     private void addListener(String addrStr, int port) throws UnknownHostException {
         InetAddress addr = InetAddress.getByName(addrStr);
         addUDP(addr, port);
         addTCP(addr, port);
-        System.out.println("DnsServer: listening on " + addrport(addr, port));
+        log.info("listening on {}", addrport(addr, port));
     }
 
     private byte addAnswer(Message response, Name name, int type, int dclass) {
@@ -94,8 +101,7 @@ public class DnsServer {
                 }
                 nameExists = true;
             } catch (Exception e) {
-                System.err.println("DnsServer: addAnswer: exception: " + e);
-                e.printStackTrace();
+                log.error("addAnswer: exception", e);
             }
         }
 
@@ -108,11 +114,6 @@ public class DnsServer {
         return rcode;
     }
 
-    /*
-     * Note: a null return value means that the caller doesn't need to do
-     * anything.  Currently this only happens if this is an AXFR request over
-     * TCP.
-     */
     private byte[] generateReply(Message query, byte[] in, Socket s) {
         Header header;
         int maxLength;
@@ -200,42 +201,53 @@ public class DnsServer {
         return buildErrorMessage(query.getHeader(), rcode, query.getQuestion());
     }
 
+    private void serveTCPConnection(Socket s) {
+        InetAddress addr = s.getLocalAddress();
+        int port = s.getLocalPort();
+
+        try (InputStream is = s.getInputStream()) {
+            int inLength;
+            DataInputStream dataIn;
+            DataOutputStream dataOut;
+            byte[] in;
+
+            dataIn = new DataInputStream(is);
+            inLength = dataIn.readUnsignedShort();
+            in = new byte[inLength];
+            dataIn.readFully(in);
+
+            Message query;
+            byte[] response;
+            try {
+                query = new Message(in);
+                response = generateReply(query, in, s);
+                if (response == null) {
+                    return;
+                }
+            } catch (IOException e) {
+                response = formerrMessage(in);
+            }
+            dataOut = new DataOutputStream(s.getOutputStream());
+            assert response != null;
+            dataOut.writeShort(response.length);
+            dataOut.write(response);
+        } catch (IOException e) {
+            log.info( "serveTCPConnection({}): exception", addrport(addr, port), e);
+        }
+    }
+
     private void serveTCP(InetAddress addr, int port) {
         try (ServerSocket sock = new ServerSocket(port, 128, addr)) {
+            ThreadPoolExecutor executor = new ThreadPoolExecutor(5, 10,
+                    5, TimeUnit.SECONDS, new ArrayBlockingQueue<>(10));
+
             while (true) {
                 final Socket s = sock.accept();
-                try (InputStream is = s.getInputStream()) {
-                    int inLength;
-                    DataInputStream dataIn;
-                    DataOutputStream dataOut;
-                    byte[] in;
-
-                    dataIn = new DataInputStream(is);
-                    inLength = dataIn.readUnsignedShort();
-                    in = new byte[inLength];
-                    dataIn.readFully(in);
-
-                    Message query;
-                    byte[] response;
-                    try {
-                        query = new Message(in);
-                        response = generateReply(query, in, s);
-                        if (response == null) {
-                            continue;
-                        }
-                    } catch (IOException e) {
-                        response = formerrMessage(in);
-                    }
-                    dataOut = new DataOutputStream(s.getOutputStream());
-                    assert response != null;
-                    dataOut.writeShort(response.length);
-                    dataOut.write(response);
-                } catch (IOException e) {
-                    System.out.println( "DnsServer: serveTCP connection(" + addrport(addr, port) + "): " + e);
-                }
+                s.setSoTimeout(15);
+                executor.execute(() -> serveTCPConnection(s));
             }
         } catch (IOException e) {
-            System.out.println("DnsServer: serveTCP(" + addrport(addr, port) + "): " + e);
+            log.info( "serveTCP({}): exception", addrport(addr, port), e);
         }
     }
 
@@ -275,11 +287,11 @@ public class DnsServer {
                     }
                     sock.send(outdp);
                 } catch (Exception e) {
-                    System.out.println( "DnsServer: serveTCP connection(" + addrport(addr, port) + "): " + e);
+                    log.info( "serveUDP({}): connection: exception", addrport(addr, port), e);
                 }
             }
         } catch (IOException e) {
-            System.out.println("DnsServer: serveUDP(" + addrport(addr, port) + "): " + e);
+            log.info( "serveUDP({}): exception", addrport(addr, port), e);
         }
     }
 

@@ -8,6 +8,8 @@ import io.kubernetes.client.openapi.models.*;
 import io.kubernetes.client.util.Config;
 import io.kubernetes.client.util.Watch;
 import okhttp3.Call;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class NamingThread implements Runnable {
+    static final Logger log = LoggerFactory.getLogger(NamingThread.class);
 
     final ConfigDto config;
     final DnsDB dnsDB;
@@ -39,7 +42,7 @@ public class NamingThread implements Runnable {
             CoreV1Api coreV1Api = new CoreV1Api();
 
             //Watch
-            System.out.println("New watch");
+            log.info("Watch begin");
             Call call;
             try {
                 call = coreV1Api.listServiceForAllNamespacesCall(
@@ -87,22 +90,21 @@ public class NamingThread implements Runnable {
 
                     synchronized (dnsDB) {
                         //Update A records
-                        if (! externalIPs.isEmpty()) {
-                            if (serviceResponse.type.equals("DELETED")) {
-                                dnsDB.aRecords.remove(dnsName, externalIPs);
-                            } else {
-                                dnsDB.aRecords.put(dnsName, externalIPs);
-                            }
+                        if (serviceResponse.type.equals("DELETED")) {
+                            log.info("AUDIT: remove {}", dnsName);
+                            dnsDB.aRecords.remove(dnsName, externalIPs);
+                        } else if (! externalIPs.isEmpty()) {
+                            log.info("AUDIT: add {} --> {}", dnsName, externalIPs);
+                            dnsDB.aRecords.put(dnsName, externalIPs);
                         }
                     }
                 }
+                log.info("Watch end");
             } catch (Exception e) {
                 throw new PrettyException("Failed to execute watch on services", K8sUtil.processException(e));
             }
         } catch (Exception e) {
-            System.err.println("NamingThread: ERROR: " + e);
-            e.printStackTrace();
-
+            log.error("Watch iteration failed", e);
         }
     }
 

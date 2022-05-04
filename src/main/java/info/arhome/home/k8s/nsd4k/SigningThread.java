@@ -12,11 +12,15 @@ import io.kubernetes.client.util.PatchUtils;
 import io.kubernetes.client.util.Watch;
 import okhttp3.Call;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
 public class SigningThread implements Runnable{
+    Logger log = LoggerFactory.getLogger(SigningThread.class);
 
     private final ConfigDto config;
 
@@ -44,7 +48,7 @@ public class SigningThread implements Runnable{
             CoreV1Api coreV1Api = new CoreV1Api();
 
             //Watch
-            System.out.println("New watch");
+            log.info("Watch start");
             Call call;
             try {
                 call = coreV1Api.listSecretForAllNamespacesCall(
@@ -98,6 +102,8 @@ public class SigningThread implements Runnable{
 
                         //Apply patch
                         try {
+                            log.info("AUDIT: Adding certificate({}) --> secret({}/{})",
+                                    name, secretMeta.getNamespace(), secretMeta.getName());
                             PatchUtils.patch(V1Secret.class,
                                     () -> coreV1Api.patchNamespacedSecretCall
                                         (secretMeta.getName(), secretMeta.getNamespace(), secretPatch,
@@ -109,13 +115,12 @@ public class SigningThread implements Runnable{
                         }
                     }
                 }
+                log.info("Watch end");
             } catch (Exception e) {
                 throw new PrettyException("Failed to execute watch on services", K8sUtil.processException(e));
             }
         } catch (Exception e) {
-            System.err.println("SigningThread: ERROR: " + e);
-            e.printStackTrace();
-
+            log.error("Watch iteration failed", e);
         }
     }
 

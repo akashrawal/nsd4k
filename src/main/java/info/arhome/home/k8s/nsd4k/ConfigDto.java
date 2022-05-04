@@ -13,10 +13,5 @@ public class ConfigDto {
         public int port;
     }
     public ListeningSocket[] dnsListen;
-
-    //TODO: delete
-    public String zoneTemplate;
-    public String zoneOutput;
-    public String reloadCmd;
 }
 

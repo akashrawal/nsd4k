@@ -1,5 +1,8 @@
 package info.arhome.home.k8s.nsd4k;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 //import java.io.OutputStream;
 import java.nio.file.Files;
@@ -13,6 +16,8 @@ import java.time.Instant;
 import java.util.Arrays;
 
 public class CA {
+    Logger log = LoggerFactory.getLogger(CA.class);
+
     public static final String CA_CERT_FILE = "cacert.pem";
     public static final String CA_KEY_FILE = "cakey.pem";
     public static final String EXT_FILE = "ext.cnf";
@@ -99,9 +104,12 @@ public class CA {
 
         //Generate CA certificate if it does not exist
         if (! Files.exists(cacert)) {
+            log.info("AUDIT: Generating CA certificate");
             runOrDie("openssl", "req", "-new", "-x509", "-newkey", "rsa:4096", "-days", "1095",
                     "-nodes", "-subj", makeSubject(config.caCommonName),
                     "-keyout", cakey.toString(), "-out", cacert.toString());
+        } else {
+            log.info("AUDIT: Not generating CA certificate");
         }
     }
 
@@ -127,6 +135,8 @@ public class CA {
         assert(primaryName != null);
         String san = sanBuilder.toString();
 
+        log.info("AUDIT: generating certificate for {}", name);
+
         //CSR
         runOrDie("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                 "-subj", makeSubject(primaryName), "-addext", "subjectAltName=" + san,
@@ -144,7 +154,7 @@ public class CA {
     }
 
     public Cert getCert(String name) throws IOException {
-        Path appdir = basedir.resolve("apps").resolve("name");
+        Path appdir = basedir.resolve("apps").resolve(name);
 
         try {
             Cert cert = new Cert(appdir);
