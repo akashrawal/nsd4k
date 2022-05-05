@@ -27,11 +27,15 @@ public class SigningThread implements Runnable{
     private final CA ca;
     private final ObjectMapper objectMapper;
 
+    private String resourceVersion;
+
     public SigningThread(ConfigDto _config) throws IOException {
         config = _config;
 
         ca = new CA(config);
         objectMapper = new ObjectMapper();
+
+        resourceVersion = null;
     }
 
     void loop() {
@@ -48,12 +52,12 @@ public class SigningThread implements Runnable{
             CoreV1Api coreV1Api = new CoreV1Api();
 
             //Watch
-            log.info("Watch start");
+            log.info("Watch start at {}", resourceVersion);
             Call call;
             try {
                 call = coreV1Api.listSecretForAllNamespacesCall(
                         null, null, null, null,
-                        null, null, null, null,
+                        null, null, resourceVersion, null,
                         null, true, null);
             } catch (Exception e) {
                 throw new PrettyException("Failed to create watch call on services", K8sUtil.processException(e));
@@ -65,10 +69,13 @@ public class SigningThread implements Runnable{
 
                 for (Watch.Response<V1Secret> secretResponse : v1SecretWatch) {
                     V1Secret secret = secretResponse.object;
+                    V1ObjectMeta secretMeta = secret.getMetadata();
+                    if (secretMeta == null)
+                        continue;
+
+                    resourceVersion = secretMeta.getResourceVersion();
+
                     if (secretResponse.type.equals("ADDED")) {
-                        V1ObjectMeta secretMeta = secret.getMetadata();
-                        if (secretMeta == null)
-                            continue;
                         Map<String, String> labels = secretMeta.getLabels();
                         if (labels == null)
                             continue;
@@ -120,6 +127,7 @@ public class SigningThread implements Runnable{
                 throw new PrettyException("Failed to execute watch on services", K8sUtil.processException(e));
             }
         } catch (Exception e) {
+            resourceVersion = null;
             log.error("Watch iteration failed", e);
         }
     }

@@ -23,9 +23,13 @@ public class NamingThread implements Runnable {
     final ConfigDto config;
     final DnsDB dnsDB;
 
+    String resourceVersion;
+
     public NamingThread(ConfigDto _config, DnsDB _dnsDB) {
         config = _config;
         dnsDB = _dnsDB;
+
+        resourceVersion = null;
     }
 
     void loop() {
@@ -42,13 +46,13 @@ public class NamingThread implements Runnable {
             CoreV1Api coreV1Api = new CoreV1Api();
 
             //Watch
-            log.info("Watch begin");
+            log.info("Watch begin at {}", resourceVersion);
             Call call;
             try {
                 call = coreV1Api.listServiceForAllNamespacesCall(
                         null, null, null, null,
-                        null, null, null, null,
-                        null, true, null);
+                        null, null, resourceVersion, null,
+                        10, true, null);
             } catch (Exception e) {
                 throw new PrettyException("Failed to create watch call on services", K8sUtil.processException(e));
             }
@@ -64,6 +68,8 @@ public class NamingThread implements Runnable {
                     Map<String, String> labels = serviceMetadata.getLabels();
                     V1ServiceSpec serviceSpec = service.getSpec();
                     assert (serviceSpec != null);
+
+                    resourceVersion = serviceMetadata.getResourceVersion();
 
                     String namespace = Objects.requireNonNullElse(serviceMetadata.getNamespace(), "NULL");
                     String name = service.getMetadata().getName();
@@ -104,6 +110,10 @@ public class NamingThread implements Runnable {
                 throw new PrettyException("Failed to execute watch on services", K8sUtil.processException(e));
             }
         } catch (Exception e) {
+            resourceVersion = null;
+            synchronized (dnsDB) {
+                dnsDB.aRecords.clear();
+            }
             log.error("Watch iteration failed", e);
         }
     }
