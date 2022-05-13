@@ -1,7 +1,5 @@
 package info.arhome.home.k8s.nsd4k;
 
-import java.util.List;
-
 public class ConfigDto {
     public String datadir;
     public String[] domains;

@@ -2,6 +2,7 @@ package info.arhome.home.k8s.nsd4k;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.xbill.DNS.Flags;
 import org.xbill.DNS.Header;
 import org.xbill.DNS.Message;
@@ -13,7 +14,6 @@ import org.xbill.DNS.Record;
 import org.xbill.DNS.Section;
 import org.xbill.DNS.TSIGRecord;
 import org.xbill.DNS.Type;
-import org.xbill.DNS.ZoneTransferException;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -27,6 +27,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -42,7 +43,7 @@ public class DnsServer {
         return addr.getHostAddress() + "#" + port;
     }
 
-    public DnsServer(ConfigDto _config, DnsDB _dnsDB) throws IOException, ZoneTransferException {
+    public DnsServer(ConfigDto _config, DnsDB _dnsDB) throws IOException {
         config = _config;
         dnsDB = _dnsDB;
 
@@ -80,6 +81,7 @@ public class DnsServer {
             synchronized (dnsDB) {
                 aRecords = dnsDB.aRecords.get(lookupString);
             }
+            Collections.shuffle(aRecords);
         }
 
         if (aRecords != null) {

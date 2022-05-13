@@ -5,7 +5,6 @@ import java.nio.file.Paths;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-
 public class Main {
     public static void main(String[] args) {
         //Load configuration
@@ -21,14 +20,6 @@ public class Main {
             throw new RuntimeException("Failed to read configuration", e);
         }
 
-        try {
-            SigningThread signingThread = new SigningThread(config);
-            Thread signingThreadRunner = new Thread(signingThread);
-            signingThreadRunner.start();
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to create SigningThread", e);
-        }
-
         final DnsDB dnsDB = new DnsDB();
         try {
             new DnsServer(config, dnsDB);
@@ -36,6 +27,17 @@ public class Main {
             throw new RuntimeException("Unable to create DnsServer", e);
         }
 
-        new NamingThread(config, dnsDB).run();
+        try {
+            Thread t = new Thread(new ConfigMapThread(config, dnsDB));
+            t.start();
+        } catch(Exception e) {
+            throw new RuntimeException("Unable to create ConfigMapThread", e);
+        }
+
+        try {
+            new ServiceThread(config, dnsDB).run();
+        } catch(Exception e) {
+            throw new RuntimeException("Unable to create NamingThread", e);
+        }
     }
 }
