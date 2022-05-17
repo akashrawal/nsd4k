@@ -28,26 +28,37 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 public class ServiceThread implements Runnable {
     static final Logger log = LoggerFactory.getLogger(ServiceThread.class);
 
-    final ConfigDto config;
-    final DnsDB dnsDB;
-    final CA ca;
+    private final DnsDB dnsDB;
+    private final CA ca;
 
-    final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper;
 
-    Instant certRotateTime;
+    /*
+    private boolean clusterDnsChecked;
+    private String clusterDnsDomain;
+     */
+    private Instant certRotateTime;
 
-    public ServiceThread(ConfigDto _config, DnsDB _dnsDB) throws IOException {
-        config = _config;
+    public ServiceThread(ConfigDto config, DnsDB _dnsDB) throws IOException {
         dnsDB = _dnsDB;
         ca = new CA(config);
 
         objectMapper = new ObjectMapper();
 
+        /*
+        clusterDnsChecked = false;
+        clusterDnsDomain = null;
+
+         */
         certRotateTime = null;
     }
 
@@ -88,8 +99,11 @@ public class ServiceThread implements Runnable {
                     _dnsName = labels.get(K8sUtil.getLabelPrefix() + "/name");
 
                 if (_dnsName == null)
-                    _dnsName = name + "." + namespace;
-                dnsName = _dnsName;
+                    dnsName = name + "." + namespace;
+                else if (_dnsName.equals("default"))
+                    dnsName = namespace;
+                else
+                    dnsName = _dnsName + "." + namespace;
             }
             aRecords.put(dnsName, externalIPs);
 
@@ -174,6 +188,40 @@ public class ServiceThread implements Runnable {
             Configuration.setDefaultApiClient(client);
 
             CoreV1Api coreV1Api = new CoreV1Api();
+
+            /*
+            //Check the cluster domain from coredns config
+            if (! clusterDnsChecked) {
+                try {
+                    V1ConfigMap corednsConfig = coreV1Api.readNamespacedConfigMap
+                            ("coredns", "kube-system", null);
+                    if (corednsConfig != null) {
+                        Map<String, String> data = corednsConfig.getData();
+                        if (data != null) {
+                            String corefile = data.get("Corefile");
+                            if (corefile != null) {
+                                Pattern p = Pattern.compile("kubernetes[ \\t]*([a-z0-9.-]*) ");
+                                Matcher m = p.matcher(corefile);
+                                if (m.find()) {
+                                    clusterDnsDomain = m.group(1);
+                                    log.info("Cluster DNS domain: {}", clusterDnsDomain);
+                                }
+                            }
+                        }
+                    }
+                } catch (ApiException e) {
+                    if (e.getCode() >= 400 && e.getCode() < 500) {
+                        log.warn("Unable to fetch coredns configuration ({})", e.getCode(),
+                                K8sUtil.processException(e));
+                    } else {
+                        throw new PrettyException("Unable to check coredns config", K8sUtil.processException(e));
+                    }
+                }
+
+                clusterDnsChecked = true;
+            }
+
+             */
 
             //List
             log.info("List");

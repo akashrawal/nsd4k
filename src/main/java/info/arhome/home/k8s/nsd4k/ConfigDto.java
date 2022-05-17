@@ -11,5 +11,7 @@ public class ConfigDto {
         public int port;
     }
     public ListeningSocket[] dnsListen;
+
+    public String[] privilegedNamespaces;
 }
 

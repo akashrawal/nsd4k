@@ -18,8 +18,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ConfigMapThread implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ConfigMapThread.class);
@@ -28,31 +31,40 @@ public class ConfigMapThread implements Runnable {
 
     private static final String LABEL_SELECTOR = K8sUtil.getLabelPrefix() + "/dns=dns";
 
-    final ConfigDto config;
-    final DnsDB dnsDB;
-    final ObjectMapper objectMapper;
+    private final DnsDB dnsDB;
+    private final ObjectMapper objectMapper;
+    private final Set<String> privilegedNamespaces;
 
-    public ConfigMapThread(ConfigDto _config, DnsDB _dnsDB) {
-        config = _config;
+    public ConfigMapThread(ConfigDto config, DnsDB _dnsDB) {
         dnsDB = _dnsDB;
 
         objectMapper = new ObjectMapper();
+        privilegedNamespaces = new HashSet<>();
+        Collections.addAll(privilegedNamespaces, config.privilegedNamespaces);
     }
 
     private static class DnsEntriesDto {
         public Map<String, List<String>> A;
     }
 
-    private static class ConfigMapEntry extends DnsDB.Entry {
+    private class ConfigMapEntry extends DnsDB.Entry {
         DnsEntriesDto dnsEntries = null;
 
-        public ConfigMapEntry(V1ConfigMap configMap, ObjectMapper objectMapper) {
+        public ConfigMapEntry(V1ConfigMap configMap) {
             V1ObjectMeta metadata = configMap.getMetadata();
             assert(metadata != null);
+            Map<String, String> labels = metadata.getLabels();
 
             kind = CONFIG_MAP_ENTRY_KIND;
             namespace = metadata.getNamespace();
             name = metadata.getName();
+
+            String suffix = "." + namespace;
+            if (privilegedNamespaces.contains(namespace) && labels != null) {
+                String altSuffix = labels.get(K8sUtil.getLabelPrefix() + "/suffix");
+                if (altSuffix != null)
+                    suffix = altSuffix;
+            }
 
             Map<String, String> data = configMap.getData();
             if (data != null) {
@@ -60,7 +72,8 @@ public class ConfigMapThread implements Runnable {
                 if (entriesJson != null) {
                     try {
                         dnsEntries = objectMapper.readValue(entriesJson, DnsEntriesDto.class);
-                        aRecords.putAll(dnsEntries.A);
+                        for (Map.Entry<String, List<String>> oneEntry : dnsEntries.A.entrySet())
+                            aRecords.put(oneEntry.getKey() + suffix, oneEntry.getValue());
                     } catch (Exception e) {
                         log.warn("AUDIT: Unable to parse ConfigMap {}/{}", namespace, name, e);
                     }
@@ -70,9 +83,9 @@ public class ConfigMapThread implements Runnable {
     }
 
     void processConfigMap(V1ConfigMap configMap, K8sUtil.WatchEvent eventType) {
-        ConfigMapEntry entry = new ConfigMapEntry(configMap, objectMapper);
+        ConfigMapEntry entry = new ConfigMapEntry(configMap);
 
-        final boolean remove = (eventType == K8sUtil.WatchEvent.DELETED) || (entry.aRecords.isEmpty());
+        final boolean remove = (eventType == K8sUtil.WatchEvent.DELETED);
         synchronized (dnsDB) {
             //Update dnsDB
             if (remove) {
