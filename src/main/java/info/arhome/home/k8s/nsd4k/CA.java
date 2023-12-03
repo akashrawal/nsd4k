@@ -170,4 +170,8 @@ public class CA {
 
         return makeCert(name);
     }
+
+    public Path getCacertPem() {
+        return cacert;
+    }
 }

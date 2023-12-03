@@ -123,6 +123,7 @@ public class ServiceThread implements Runnable {
                 Map<String, byte[]> secretDataModel = new HashMap<>();
                 secretDataModel.put(CA.CERT_FILE, Files.readAllBytes(cert.getCertificatePem()));
                 secretDataModel.put(CA.KEY_FILE, Files.readAllBytes(cert.getPrivateKeyPem()));
+                secretDataModel.put(CA.CA_CERT_FILE, Files.readAllBytes(ca.getCacertPem()));
                 V1Patch secretPatch = new V1Patch("[{\"op\":\"replace\",\"path\":\"/data\",\"value\":"
                         + objectMapper.writeValueAsString(secretDataModel) + "}]");
 

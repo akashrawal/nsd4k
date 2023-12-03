@@ -81,7 +81,6 @@ public class DnsServer {
             synchronized (dnsDB) {
                 aRecords = dnsDB.aRecords.get(lookupString);
             }
-            Collections.shuffle(aRecords);
         }
 
         if (aRecords != null) {
@@ -97,6 +96,8 @@ public class DnsServer {
                         records.add(Record.fromString(name, type, dclass, 60, addr, null));
                     }
                 }
+
+                Collections.shuffle(records);
 
                 for (Record r : records) {
                     response.addRecord(r, Section.ANSWER);
